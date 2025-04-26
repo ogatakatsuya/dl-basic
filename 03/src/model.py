@@ -1,4 +1,5 @@
 import os
+import copy
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
@@ -94,6 +95,17 @@ class Sigmoid(Layer):
 
     def backward(self, out: np.ndarray) -> np.ndarray:
         return out * (1 - self.out) * self.out
+    
+class ReLU(Layer):
+    def __init__(self):
+        self.out: np.ndarray = np.empty(0)
+
+    def forward(self, x: np.ndarray) -> np.ndarray:
+        self.out = np.maximum(x, 0)
+        return self.out
+
+    def backward(self, out: np.ndarray) -> np.ndarray:
+        return out * (self.out > 0)
 
 
 class SoftMaxWithLoss:
@@ -148,20 +160,22 @@ class MLP(Model):
         ).astype("float32")
         b1 = np.zeros(shape=(hidden_dim,)).astype("float32")
         W2 = np.random.uniform(
-            low=-0.08, high=0.08, size=(hidden_dim, hidden_dim)
-        ).astype("float32")
-        b2 = np.zeros(shape=(hidden_dim,)).astype("float32")
-        W3 = np.random.uniform(
             low=-0.08, high=0.08, size=(hidden_dim, output_dim)
         ).astype("float32")
-        b3 = np.zeros(shape=(output_dim,)).astype("float32")
+        b2 = np.zeros(shape=(output_dim,)).astype("float32")
+        W3 = np.random.uniform(
+            low=-0.08, high=0.08, size=(hidden_dim, hidden_dim)
+        ).astype("float32")
+        b3 = np.zeros(shape=(hidden_dim,)).astype("float32")
+        W4 = np.random.uniform(
+            low=-0.08, high=0.08, size=(hidden_dim, output_dim)
+        ).astype("float32")
+        b4 = np.zeros(shape=(output_dim,)).astype("float32")
 
         self.layers: list[Layer] = [
             Affine(W1, b1),
-            Sigmoid(),
+            ReLU(),
             Affine(W2, b2),
-            Sigmoid(),
-            Affine(W3, b3),
         ]
         self.loss_layer = SoftMaxWithLoss()
 
@@ -237,12 +251,13 @@ def train_model(
     y_train: np.ndarray,
     x_valid: np.ndarray,
     y_valid: np.ndarray,
-    n_epochs: int = 10,
-    batch_size: int = 100,
-    patience: int = 5,
+    n_epochs: int,
+    batch_size: int,
+    patience: int = 100,
 ):
     best_val_loss = float("inf")
     best_epoch = 0
+    best_params = None
     patience_counter = 0
 
     for epoch in range(n_epochs):
@@ -314,10 +329,13 @@ def train_model(
             best_val_loss = avg_val_loss
             best_epoch = epoch
             patience_counter = 0
+            best_params = copy.deepcopy(model.params)
         else:
             patience_counter += 1
             if patience_counter >= patience:
                 print(f"Early stopping at epoch {epoch} (best was epoch {best_epoch})")
+                if best_params is not None:
+                    model.params = best_params
                 break
 
 def predict(model: Model, x_test: np.ndarray) -> None:
@@ -336,7 +354,7 @@ if __name__ == "__main__":
     output_dim = 10
     hidden_dim = 128
     batch_size = 100
-    n_epochs = 100
+    n_epochs = 1000
 
     model = MLP(input_dim, output_dim, hidden_dim)
     optimizer = Adam(lr=0.001)
