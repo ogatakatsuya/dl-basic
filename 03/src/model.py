@@ -107,6 +107,26 @@ class ReLU(Layer):
     def backward(self, out: np.ndarray) -> np.ndarray:
         return out * (self.out > 0)
 
+class Dropout(Layer):
+    def __init__(self, dropout_ratio: float):
+        self.dropout_ratio = dropout_ratio
+        self.mask: np.ndarray = np.empty(0)
+
+    def forward(self, x: np.ndarray, is_train: bool = True) -> np.ndarray:
+        if self.dropout_ratio == 0:
+            return x
+
+        if not is_train:
+            return x * (1 - self.dropout_ratio)
+        
+        self.mask = np.random.rand(*x.shape) > self.dropout_ratio
+        return x * self.mask
+
+    def backward(self, out: np.ndarray) -> np.ndarray:
+        if self.dropout_ratio == 0:
+            return out
+
+        return out * self.mask
 
 class SoftMaxWithLoss:
     def __init__(self):
@@ -251,9 +271,9 @@ def train_model(
     y_train: np.ndarray,
     x_valid: np.ndarray,
     y_valid: np.ndarray,
-    n_epochs: int,
-    batch_size: int,
-    patience: int = 100,
+    n_epochs: int = 10,
+    batch_size: int = 100,
+    patience: int = 10,
 ):
     best_val_loss = float("inf")
     best_epoch = 0
