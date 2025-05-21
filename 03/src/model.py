@@ -1,6 +1,7 @@
 import os
 import copy
 from abc import ABCMeta, abstractmethod
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -95,7 +96,8 @@ class Sigmoid(Layer):
 
     def backward(self, out: np.ndarray) -> np.ndarray:
         return out * (1 - self.out) * self.out
-    
+
+
 class ReLU(Layer):
     def __init__(self):
         self.out: np.ndarray = np.empty(0)
@@ -106,6 +108,7 @@ class ReLU(Layer):
 
     def backward(self, out: np.ndarray) -> np.ndarray:
         return out * (self.out > 0)
+
 
 class Dropout(Layer):
     def __init__(self, dropout_ratio: float):
@@ -118,7 +121,7 @@ class Dropout(Layer):
 
         if not is_train:
             return x * (1 - self.dropout_ratio)
-        
+
         self.mask = np.random.rand(*x.shape) > self.dropout_ratio
         return x * self.mask
 
@@ -127,6 +130,7 @@ class Dropout(Layer):
             return out
 
         return out * self.mask
+
 
 class SoftMaxWithLoss:
     def __init__(self):
@@ -175,27 +179,28 @@ class Model(metaclass=ABCMeta):
 
 class MLP(Model):
     def __init__(self, input_dim: int, output_dim: int, hidden_dim: int):
-        W1 = np.random.uniform(
-            low=-0.08, high=0.08, size=(input_dim, hidden_dim)
-        ).astype("float32")
+        # He初期化
+        W1 = np.random.randn(input_dim, hidden_dim) * np.sqrt(2.0 / input_dim).astype(
+            "float32"
+        )
         b1 = np.zeros(shape=(hidden_dim,)).astype("float32")
-        W2 = np.random.uniform(
-            low=-0.08, high=0.08, size=(hidden_dim, output_dim)
-        ).astype("float32")
-        b2 = np.zeros(shape=(output_dim,)).astype("float32")
-        W3 = np.random.uniform(
-            low=-0.08, high=0.08, size=(hidden_dim, hidden_dim)
-        ).astype("float32")
-        b3 = np.zeros(shape=(hidden_dim,)).astype("float32")
-        W4 = np.random.uniform(
-            low=-0.08, high=0.08, size=(hidden_dim, output_dim)
-        ).astype("float32")
-        b4 = np.zeros(shape=(output_dim,)).astype("float32")
+
+        W2 = np.random.randn(hidden_dim, hidden_dim) * np.sqrt(2.0 / hidden_dim).astype(
+            "float32"
+        )
+        b2 = np.zeros(shape=(hidden_dim,)).astype("float32")
+
+        W3 = np.random.randn(hidden_dim, output_dim) * np.sqrt(2.0 / hidden_dim).astype(
+            "float32"
+        )
+        b3 = np.zeros(shape=(output_dim,)).astype("float32")
 
         self.layers: list[Layer] = [
             Affine(W1, b1),
             ReLU(),
             Affine(W2, b2),
+            Sigmoid(),
+            Affine(W3, b3),
         ]
         self.loss_layer = SoftMaxWithLoss()
 
@@ -273,9 +278,9 @@ def train_model(
     y_valid: np.ndarray,
     n_epochs: int = 10,
     batch_size: int = 100,
-    patience: int = 10,
+    patience: int = 100,
 ):
-    best_val_loss = float("inf")
+    best_valid_acc = 0.0
     best_epoch = 0
     best_params = None
     patience_counter = 0
@@ -345,8 +350,8 @@ def train_model(
         )
 
         # early stopping 判定
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
+        if valid_acc > best_valid_acc:
+            best_valid_acc = valid_acc
             best_epoch = epoch
             patience_counter = 0
             best_params = copy.deepcopy(model.params)
@@ -358,13 +363,17 @@ def train_model(
                     model.params = best_params
                 break
 
+
 def predict(model: Model, x_test: np.ndarray) -> None:
     pred = model.predict(x_test)
     labels = np.argmax(pred, axis=1)
     submission = pd.Series(labels, name="label")
-    submission.to_csv(
-        "./03/submission/submission_pred.csv", header=True, index_label="id"
-    )
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"./03/submission/submission_pred_{timestamp}.csv"
+
+    submission.to_csv(filename, header=True, index_label="id")
+
 
 if __name__ == "__main__":
     data_loader = DataLoader("./03/data")
